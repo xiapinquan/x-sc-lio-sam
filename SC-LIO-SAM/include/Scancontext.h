@@ -116,6 +116,10 @@ public:
 
     // add for save cart sacn conext of every frame points;
     Eigen::MatrixXd cartScanContext;
+    bool haveDetectTunnel = false;
+    const int TUNNEL_RADIUS = 15;
+    const int TUNNEL_WIDTH = TUNNEL_RADIUS*2;
+    const int THRESHOLE_LINE_LENGTH = TUNNEL_WIDTH * 0.60;
 }; // SCManager
 
 // } // namespace SC2

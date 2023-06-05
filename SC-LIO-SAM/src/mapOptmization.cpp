@@ -655,7 +655,7 @@ public:
         icp.align(*unused_result);
 
         if (icp.hasConverged() == false || icp.getFitnessScore() > historyKeyframeFitnessScore) {
-            std::cout << "ICP fitness test failed (" << icp.getFitnessScore() << " > " << historyKeyframeFitnessScore << "). Reject this RS loop." << std::endl;
+            // std::cout << "ICP fitness test failed (" << icp.getFitnessScore() << " > " << historyKeyframeFitnessScore << "). Reject this RS loop." << std::endl;
             return;
         } else {
             std::cout << "ICP fitness test passed (" << icp.getFitnessScore() << " < " << historyKeyframeFitnessScore << "). Add this RS loop." << std::endl;
@@ -711,7 +711,7 @@ public:
         if( loopKeyPre == -1 /* No loop found */)
             return;
 
-        std::cout << "SC loop found! between " << loopKeyCur << " and " << loopKeyPre << "." << std::endl; // giseop
+        // std::cout << "SC loop found! between " << loopKeyCur << " and " << loopKeyPre << "." << std::endl; // giseop
 
         // extract cloud
         pcl::PointCloud<PointType>::Ptr cureKeyframeCloud(new pcl::PointCloud<PointType>());
@@ -747,7 +747,7 @@ public:
         // TODO icp align with initial 
 
         if (icp.hasConverged() == false || icp.getFitnessScore() > historyKeyframeFitnessScore) {
-            std::cout << "ICP fitness test failed (" << icp.getFitnessScore() << " > " << historyKeyframeFitnessScore << "). Reject this SC loop." << std::endl;
+            // std::cout << "ICP fitness test failed (" << icp.getFitnessScore() << " > " << historyKeyframeFitnessScore << "). Reject this SC loop." << std::endl;
             return;
         } else {
             std::cout << "ICP fitness test passed (" << icp.getFitnessScore() << " < " << historyKeyframeFitnessScore << "). Add this SC loop." << std::endl;
@@ -1821,27 +1821,29 @@ public:
             scManager.makeAndSaveScancontextAndKeys(*multiKeyFrameFeatureCloud); 
         }
 
-        // save sc data
-        const auto& curr_scd = scManager.getConstRefRecentSCD();
+        if(scManager.haveDetectTunnel){
+            std::string curr_scd_node_idx = padZeros(scManager.polarcontexts_.size() - 1);
+            // save sc data
+            const auto& curr_scd = scManager.getConstRefRecentSCD();
+            saveSCD(saveSCDDirectory + curr_scd_node_idx + ".scd", curr_scd);
 
-        std::string curr_scd_node_idx = padZeros(scManager.polarcontexts_.size() - 1);
-        saveSCD(saveSCDDirectory + curr_scd_node_idx + ".scd", curr_scd);
+            //flag xia : add text for to detect tunnel feature.
+            const auto& curr_cart_scd = scManager.getConstRecentCartSCD();
+            saveSCD(saveSCDDirectory + curr_scd_node_idx +"_cart" + ".scd", curr_cart_scd);
+            cout<<"curr_scd_node_idx : "<<curr_scd_node_idx<<endl;
 
-        //flag xia : add text for to detect tunnel feature.
-        const auto& curr_cart_scd = scManager.getConstRecentCartSCD();
-        saveSCD(saveSCDDirectory + curr_scd_node_idx +"_cart" + ".scd", curr_cart_scd);
-
-        // save keyframe cloud as file giseop
-        bool saveRawCloud { true };
-        pcl::PointCloud<PointType>::Ptr thisKeyFrameCloud(new pcl::PointCloud<PointType>());
-        if(saveRawCloud) { 
-            *thisKeyFrameCloud += *laserCloudRaw;
-        } else {
-            *thisKeyFrameCloud += *thisCornerKeyFrame;
-            *thisKeyFrameCloud += *thisSurfKeyFrame;
+            // save keyframe cloud as file giseop
+            bool saveRawCloud { true };
+            pcl::PointCloud<PointType>::Ptr thisKeyFrameCloud(new pcl::PointCloud<PointType>());
+            if(saveRawCloud) { 
+                *thisKeyFrameCloud += *laserCloudRaw;
+            } else {
+                *thisKeyFrameCloud += *thisCornerKeyFrame;
+                *thisKeyFrameCloud += *thisSurfKeyFrame;
+            }
+            pcl::io::savePCDFileBinary(saveNodePCDDirectory + curr_scd_node_idx + ".pcd", *thisKeyFrameCloud);
+            pgTimeSaveStream << laserCloudRawTime << std::endl;
         }
-        pcl::io::savePCDFileBinary(saveNodePCDDirectory + curr_scd_node_idx + ".pcd", *thisKeyFrameCloud);
-        pgTimeSaveStream << laserCloudRawTime << std::endl;
 
         // save path for visualization
         updatePath(thisPose6D);

@@ -159,7 +159,7 @@ MatrixXd SCManager::makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_do
         // main
     const int NO_POINT = -1000;
 
-    int radius = 15;
+    int radius = TUNNEL_RADIUS;
     MatrixXd desc = NO_POINT * MatrixXd::Ones(radius*2, radius*2);
     int col_idx,row_idx;
     SCPointType pt;
@@ -185,27 +185,78 @@ MatrixXd SCManager::makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_do
     }
 
     // reset no points to zero (for cosine dist later)
+    int count = 0;
     for ( int row_idx = 0; row_idx < desc.rows(); row_idx++ )
         for ( int col_idx = 0; col_idx < desc.cols(); col_idx++ )
-            if( desc(row_idx, col_idx) < 0.5)
+            if( desc(row_idx, col_idx) < 0.5){
                 desc(row_idx, col_idx) = 0;
-    desc(radius,radius) = -111;
+                count++;
+            }
+
+    //存储非0元素个数
+    desc(radius,radius) = -count;
     return desc;
 }
 
 /**
  * @brief 判断cart context 是否有隧道特征，用于是否过滤当前帧加入scan回环数据库
  * 隧道特征的3个条件：
+ *              3. mattix中0元素比例超过 80%
  *              1. mattix是否有两条线位于左右，连续长度超过n个
  *              2. 两条线上的数据均值 > 2.5m
- *              3. mattix中0元素比例超过 80%？
  * @return true 
  * @return false 
  */
 bool SCManager::haveTunnelFeature(){
+    if(cartScanContext(TUNNEL_RADIUS,TUNNEL_RADIUS) > 0) return false;
+    int zero_num = -cartScanContext(TUNNEL_RADIUS,TUNNEL_RADIUS);
+    if(((float)zero_num/(TUNNEL_WIDTH*TUNNEL_WIDTH)) < 0.60){
+        return false;
+    }
 
-    
-    return false;
+    bool left_line_find = false,right_line_find = false;
+    //left tunnel line detect
+    for(int i=TUNNEL_RADIUS-1; i>=0 ;i--){
+        if(cartScanContext(TUNNEL_RADIUS,i) != 0){
+            int j = 1;
+            int count = 1;
+            float sum_height = cartScanContext(TUNNEL_RADIUS,i);
+            while(j < TUNNEL_RADIUS && cartScanContext(TUNNEL_RADIUS+j,i) != 0 && cartScanContext(TUNNEL_RADIUS-j,i) != 0){
+                count += 2;
+                sum_height += cartScanContext(TUNNEL_RADIUS+j,i);
+                sum_height += cartScanContext(TUNNEL_RADIUS-j,i);
+                j++;
+            }
+            if(count < THRESHOLE_LINE_LENGTH || (sum_height/count )< 2.0) continue;
+            else{
+                left_line_find = true;
+                break;
+            };
+        }
+    }
+    if(!left_line_find) return false;
+    //right tunnel line detect
+    for(int i=TUNNEL_RADIUS+1; i<TUNNEL_WIDTH ;i++){
+        if(cartScanContext(TUNNEL_RADIUS,i) != 0){
+            int j = 1;
+            int count = 1;
+            float sum_height = cartScanContext(TUNNEL_RADIUS,i);
+            while(j < TUNNEL_RADIUS && cartScanContext(TUNNEL_RADIUS+j,i) != 0 && cartScanContext(TUNNEL_RADIUS-j,i) != 0){
+                count += 2;
+                sum_height += cartScanContext(TUNNEL_RADIUS+j,i);
+                sum_height += cartScanContext(TUNNEL_RADIUS-j,i);
+                j++;
+            }
+            // cout<<count<<"  ,"<<sum_height/count<<" "<<endl;
+            if(count < THRESHOLE_LINE_LENGTH || (sum_height/count )< 2.0) continue;
+            else{
+                right_line_find = true;
+                break;
+            };
+        }
+    }
+    if(right_line_find) cout<<"zero_num:"<<zero_num<<"   , "<<"find tunnel!!"<<endl;
+    return right_line_find;
 }
 
 MatrixXd SCManager::makeScancontext(pcl::PointCloud<SCPointType> & _scan_down )
@@ -301,6 +352,12 @@ const Eigen::MatrixXd SCManager::getConstRecentCartSCD(void)
 void SCManager::makeAndSaveScancontextAndKeys( pcl::PointCloud<SCPointType> & _scan_down )
 {
     cartScanContext = makeCartScancontext(_scan_down);
+    //当前帧在隧道环境中退化
+    if(haveTunnelFeature()) {
+        haveDetectTunnel = true;
+        return;
+    }else haveDetectTunnel = false;
+   
     Eigen::MatrixXd sc = makeScancontext(_scan_down); // v1 
     Eigen::MatrixXd ringkey = makeRingkeyFromScancontext( sc );
     Eigen::MatrixXd sectorkey = makeSectorkeyFromScancontext( sc );
