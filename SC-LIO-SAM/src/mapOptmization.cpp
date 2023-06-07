@@ -586,9 +586,11 @@ public:
         while (ros::ok())
         {
             rate.sleep();
-            performRSLoopClosure();
-            performSCLoopClosure(); // giseop
-            visualizeLoopClosure();
+            if(!scManager.degeneratation_flag){
+                performRSLoopClosure();
+                performSCLoopClosure(); // giseop
+                visualizeLoopClosure();
+            }
         }
     }
 
@@ -747,7 +749,7 @@ public:
         // TODO icp align with initial 
 
         if (icp.hasConverged() == false || icp.getFitnessScore() > historyKeyframeFitnessScore) {
-            // std::cout << "ICP fitness test failed (" << icp.getFitnessScore() << " > " << historyKeyframeFitnessScore << "). Reject this SC loop." << std::endl;
+            std::cout << "ICP fitness test failed (" << icp.getFitnessScore() << " > " << historyKeyframeFitnessScore << "). Reject this SC loop." << std::endl;
             return;
         } else {
             std::cout << "ICP fitness test passed (" << icp.getFitnessScore() << " < " << historyKeyframeFitnessScore << "). Add this SC loop." << std::endl;
@@ -1722,6 +1724,52 @@ public:
         aLoopIsClosed = true;
     }
 
+    //flag xia
+    void computeScanContext(){
+        static int normal_frame_count = 0;
+        const SCInputType sc_input_type = SCInputType::SINGLE_SCAN_FULL; // change this 
+        // Scan Context loop detector - giseop
+        // - SINGLE_SCAN_FULL: using downsampled original point cloud (/full_cloud_projected + downsampling)
+        // - SINGLE_SCAN_FEAT: using surface feature as an input point cloud for scan context (2020.04.01: checked it works.)
+        // - MULTI_SCAN_FEAT: using NearKeyframes (because a MulRan scan does not have beyond region, so to solve this issue ... )
+        std::string curr_scd_node_idx = padZeros(scManager.frame_count);
+        if( sc_input_type == SCInputType::SINGLE_SCAN_FULL ) {
+            pcl::PointCloud<PointType>::Ptr thisRawCloudKeyFrame(new pcl::PointCloud<PointType>());
+            pcl::copyPointCloud(*laserCloudRawDS,  *thisRawCloudKeyFrame);
+            
+            scManager.makeCartScancontext(*thisRawCloudKeyFrame);
+            scManager.haveTunnelFeature();
+
+            //当前帧在隧道环境中没有退化
+            if(!scManager.degeneratation_flag) {
+                normal_frame_count++;
+                //连续5帧没有退化，计算scan cotext
+                if(normal_frame_count > 4){
+                    scManager.makeAndSaveScancontextAndKeys(*thisRawCloudKeyFrame);
+                    // save sc data
+                    const auto& curr_scd = scManager.getConstRefRecentSCD();
+                    saveSCD(saveSCDDirectory + curr_scd_node_idx + ".scd", curr_scd);
+                }
+            }else{
+                cout<<"curr_scd_node_idx:"<<curr_scd_node_idx<<" is tunnel!!!"<<endl;
+                normal_frame_count = 0;
+            }
+            scManager.frame_count++;// = cloudKeyPoses3D->size()-1;
+        }  
+        // else if (sc_input_type == SCInputType::SINGLE_SCAN_FEAT) { 
+        //     scManager.makeAndSaveScancontextAndKeys(*thisSurfKeyFrame); 
+        // }
+        // else if (sc_input_type == SCInputType::MULTI_SCAN_FEAT) { 
+        //     pcl::PointCloud<PointType>::Ptr multiKeyFrameFeatureCloud(new pcl::PointCloud<PointType>());
+        //     loopFindNearKeyframes(multiKeyFrameFeatureCloud, cloudKeyPoses6D->size() - 1, historyKeyframeSearchNum);
+        //     scManager.makeAndSaveScancontextAndKeys(*multiKeyFrameFeatureCloud); 
+        // }
+        
+        //flag xia : add text for to detect tunnel feature.
+        const auto& curr_cart_scd = scManager.getConstRecentCartSCD();
+        saveSCD(saveSCDDirectory + curr_scd_node_idx +"_cart" + ".scd", curr_cart_scd);
+    }
+
     void saveKeyFramesAndFactor()
     {
         if (saveFrame() == false)
@@ -1801,52 +1849,23 @@ public:
         cornerCloudKeyFrames.push_back(thisCornerKeyFrame);
         surfCloudKeyFrames.push_back(thisSurfKeyFrame);
 
-        // Scan Context loop detector - giseop
-        // - SINGLE_SCAN_FULL: using downsampled original point cloud (/full_cloud_projected + downsampling)
-        // - SINGLE_SCAN_FEAT: using surface feature as an input point cloud for scan context (2020.04.01: checked it works.)
-        // - MULTI_SCAN_FEAT: using NearKeyframes (because a MulRan scan does not have beyond region, so to solve this issue ... )
-        const SCInputType sc_input_type = SCInputType::SINGLE_SCAN_FULL; // change this 
-
-        if( sc_input_type == SCInputType::SINGLE_SCAN_FULL ) {
-            pcl::PointCloud<PointType>::Ptr thisRawCloudKeyFrame(new pcl::PointCloud<PointType>());
-            pcl::copyPointCloud(*laserCloudRawDS,  *thisRawCloudKeyFrame);
-            scManager.makeAndSaveScancontextAndKeys(*thisRawCloudKeyFrame);
-        }  
-        else if (sc_input_type == SCInputType::SINGLE_SCAN_FEAT) { 
-            scManager.makeAndSaveScancontextAndKeys(*thisSurfKeyFrame); 
+        // save keyframe cloud as file giseop
+        bool saveRawCloud { true };
+        pcl::PointCloud<PointType>::Ptr thisKeyFrameCloud(new pcl::PointCloud<PointType>());
+        if(saveRawCloud) { 
+            *thisKeyFrameCloud += *laserCloudRaw;
+        } else {
+            *thisKeyFrameCloud += *thisCornerKeyFrame;
+            *thisKeyFrameCloud += *thisSurfKeyFrame;
         }
-        else if (sc_input_type == SCInputType::MULTI_SCAN_FEAT) { 
-            pcl::PointCloud<PointType>::Ptr multiKeyFrameFeatureCloud(new pcl::PointCloud<PointType>());
-            loopFindNearKeyframes(multiKeyFrameFeatureCloud, cloudKeyPoses6D->size() - 1, historyKeyframeSearchNum);
-            scManager.makeAndSaveScancontextAndKeys(*multiKeyFrameFeatureCloud); 
-        }
-
-        if(scManager.haveDetectTunnel){
-            std::string curr_scd_node_idx = padZeros(scManager.polarcontexts_.size() - 1);
-            // save sc data
-            const auto& curr_scd = scManager.getConstRefRecentSCD();
-            saveSCD(saveSCDDirectory + curr_scd_node_idx + ".scd", curr_scd);
-
-            //flag xia : add text for to detect tunnel feature.
-            const auto& curr_cart_scd = scManager.getConstRecentCartSCD();
-            saveSCD(saveSCDDirectory + curr_scd_node_idx +"_cart" + ".scd", curr_cart_scd);
-            cout<<"curr_scd_node_idx : "<<curr_scd_node_idx<<endl;
-
-            // save keyframe cloud as file giseop
-            bool saveRawCloud { true };
-            pcl::PointCloud<PointType>::Ptr thisKeyFrameCloud(new pcl::PointCloud<PointType>());
-            if(saveRawCloud) { 
-                *thisKeyFrameCloud += *laserCloudRaw;
-            } else {
-                *thisKeyFrameCloud += *thisCornerKeyFrame;
-                *thisKeyFrameCloud += *thisSurfKeyFrame;
-            }
-            pcl::io::savePCDFileBinary(saveNodePCDDirectory + curr_scd_node_idx + ".pcd", *thisKeyFrameCloud);
-            pgTimeSaveStream << laserCloudRawTime << std::endl;
-        }
+        pcl::io::savePCDFileBinary(saveNodePCDDirectory + to_string(scManager.frame_count) + ".pcd", *thisKeyFrameCloud);
+        pgTimeSaveStream << laserCloudRawTime << std::endl;
 
         // save path for visualization
         updatePath(thisPose6D);
+
+        //计算scan context
+        computeScanContext();
     }
 
     void correctPoses()

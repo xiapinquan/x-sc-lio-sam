@@ -58,7 +58,9 @@ std::vector<float> eig2stdvec( MatrixXd _eigmat );
 class SCManager
 {
 public: 
-    SCManager( ) = default; // reserving data space (of std::vector) could be considered. but the descriptor is lightweight so don't care.
+    SCManager( ){
+        degeneratation_flag = false;
+    } // reserving data space (of std::vector) could be considered. but the descriptor is lightweight so don't care.
 
     Eigen::MatrixXd makeScancontext( pcl::PointCloud<SCPointType> & _scan_down );
     Eigen::MatrixXd makeRingkeyFromScancontext( Eigen::MatrixXd &_desc );
@@ -77,7 +79,7 @@ public:
     const Eigen::MatrixXd getConstRecentCartSCD(void);
 
     // flag xia, add for to detect tunnel feature.
-    Eigen::MatrixXd makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_down );
+    void makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_down );
     bool haveTunnelFeature();
 
 public:
@@ -116,10 +118,13 @@ public:
 
     // add for save cart sacn conext of every frame points;
     Eigen::MatrixXd cartScanContext;
-    bool haveDetectTunnel = false;
+    int frame_count = 0;
+    // std::atomic<bool> 
+    std::atomic<bool> degeneratation_flag;
+    std::vector<int> framesIndex;
     const int TUNNEL_RADIUS = 15;
     const int TUNNEL_WIDTH = TUNNEL_RADIUS*2;
-    const int THRESHOLE_LINE_LENGTH = TUNNEL_WIDTH * 0.60;
+    const int THRESHOLE_LINE_LENGTH = TUNNEL_WIDTH * 0.65;
 }; // SCManager
 
 // } // namespace SC2

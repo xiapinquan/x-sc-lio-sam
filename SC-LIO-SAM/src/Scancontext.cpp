@@ -154,13 +154,13 @@ std::pair<double, int> SCManager::distanceBtnScanContext( MatrixXd &_sc1, Matrix
  * 
  * @return MatrixXd 
  */
-MatrixXd SCManager::makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_down){
+void SCManager::makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_down){
     int num_pts_scan_down = _scan_down.points.size();
         // main
     const int NO_POINT = -1000;
 
     int radius = TUNNEL_RADIUS;
-    MatrixXd desc = NO_POINT * MatrixXd::Ones(radius*2, radius*2);
+    cartScanContext = NO_POINT * MatrixXd::Ones(radius*2, radius*2);
     int col_idx,row_idx;
     SCPointType pt;
     float azim_range;
@@ -180,37 +180,36 @@ MatrixXd SCManager::makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_do
         col_idx = std::min(std::max((int)ceil(pt.y+radius),0),radius*2-1);
         // cout<<row_idx<<" , "<<col_idx<<endl;
         // taking maximum z 
-        if ( desc(row_idx, col_idx) < pt.z ) // -1 means cpp starts from 0
-            desc(row_idx, col_idx) = pt.z; // update for taking maximum value at that bin
+        if ( cartScanContext(row_idx, col_idx) < pt.z ) // -1 means cpp starts from 0
+            cartScanContext(row_idx, col_idx) = pt.z; // update for taking maximum value at that bin
     }
 
     // reset no points to zero (for cosine dist later)
-    int count = 0;
-    for ( int row_idx = 0; row_idx < desc.rows(); row_idx++ )
-        for ( int col_idx = 0; col_idx < desc.cols(); col_idx++ )
-            if( desc(row_idx, col_idx) < 0.5){
-                desc(row_idx, col_idx) = 0;
-                count++;
+    int zero_count = 0;
+    for ( int row_idx = 0; row_idx < cartScanContext.rows(); row_idx++ )
+        for ( int col_idx = 0; col_idx < cartScanContext.cols(); col_idx++ )
+            if( cartScanContext(row_idx, col_idx) < 0.5){
+                cartScanContext(row_idx, col_idx) = 0;
+                zero_count++;
             }
 
     //存储非0元素个数
-    desc(radius,radius) = -count;
-    return desc;
+    cartScanContext(radius,radius) = -zero_count;
 }
 
 /**
  * @brief 判断cart context 是否有隧道特征，用于是否过滤当前帧加入scan回环数据库
  * 隧道特征的3个条件：
  *              3. mattix中0元素比例超过 80%
- *              1. mattix是否有两条线位于左右，连续长度超过n个
- *              2. 两条线上的数据均值 > 2.5m
+ *              1. mattix是否有两条线位于左右，连续长度超过 THRESHOLE_LINE_LENGTH 个
+ *              2. 两条线上的数据均值 > 2.0m
  * @return true 
  * @return false 
  */
 bool SCManager::haveTunnelFeature(){
     if(cartScanContext(TUNNEL_RADIUS,TUNNEL_RADIUS) > 0) return false;
     int zero_num = -cartScanContext(TUNNEL_RADIUS,TUNNEL_RADIUS);
-    if(((float)zero_num/(TUNNEL_WIDTH*TUNNEL_WIDTH)) < 0.60){
+    if(((float)zero_num/(TUNNEL_WIDTH*TUNNEL_WIDTH)) < 0.70){
         return false;
     }
 
@@ -227,7 +226,7 @@ bool SCManager::haveTunnelFeature(){
                 sum_height += cartScanContext(TUNNEL_RADIUS-j,i);
                 j++;
             }
-            if(count < THRESHOLE_LINE_LENGTH || (sum_height/count )< 2.0) continue;
+            if(count < THRESHOLE_LINE_LENGTH || (sum_height/count )< 1.5) continue;
             else{
                 left_line_find = true;
                 break;
@@ -255,7 +254,11 @@ bool SCManager::haveTunnelFeature(){
             };
         }
     }
-    if(right_line_find) cout<<"zero_num:"<<zero_num<<"   , "<<"find tunnel!!"<<endl;
+    if(right_line_find){
+        degeneratation_flag = true;
+    }else{
+        degeneratation_flag = false;
+    }
     return right_line_find;
 }
 
@@ -351,13 +354,8 @@ const Eigen::MatrixXd SCManager::getConstRecentCartSCD(void)
 
 void SCManager::makeAndSaveScancontextAndKeys( pcl::PointCloud<SCPointType> & _scan_down )
 {
-    cartScanContext = makeCartScancontext(_scan_down);
-    //当前帧在隧道环境中退化
-    if(haveTunnelFeature()) {
-        haveDetectTunnel = true;
-        return;
-    }else haveDetectTunnel = false;
-   
+    framesIndex.push_back(frame_count);
+    // cout<<"framesIndex : "<<framesIndex.size()<<" : "<<frame_count<<endl;
     Eigen::MatrixXd sc = makeScancontext(_scan_down); // v1 
     Eigen::MatrixXd ringkey = makeRingkeyFromScancontext( sc );
     Eigen::MatrixXd sectorkey = makeSectorkeyFromScancontext( sc );
@@ -374,20 +372,21 @@ void SCManager::makeAndSaveScancontextAndKeys( pcl::PointCloud<SCPointType> & _s
 
 
 std::pair<int, float> SCManager::detectLoopClosureID ( void )
-{
+{   
     int loop_id { -1 }; // init with -1, -1 means no loop (== LeGO-LOAM's variable "closestHistoryFrameID")
-
-    auto curr_key = polarcontext_invkeys_mat_.back(); // current observation (query)
-    auto curr_desc = polarcontexts_.back(); // current observation (query)
 
     /* 
      * step 1: candidates from ringkey tree_
      */
-    if( (int)polarcontext_invkeys_mat_.size() < NUM_EXCLUDE_RECENT + 1)
+    if(polarcontexts_.empty() || (int)polarcontext_invkeys_mat_.size() < NUM_EXCLUDE_RECENT + 1)
     {
         std::pair<int, float> result {loop_id, 0.0};
         return result; // Early return 
     }
+
+    auto curr_key = polarcontext_invkeys_mat_.back(); // current observation (query)
+    auto curr_desc = polarcontexts_.back(); // current observation (query)
+
 
     // tree_ reconstruction (not mandatory to make everytime)
     if( tree_making_period_conter % TREE_MAKING_PERIOD_ == 0) // to save computation cost
@@ -445,10 +444,10 @@ std::pair<int, float> SCManager::detectLoopClosureID ( void )
      */
     if( min_dist < SC_DIST_THRES )
     {
-        loop_id = nn_idx; 
+        loop_id = framesIndex[nn_idx]; 
     
         // std::cout.precision(3); 
-        cout << "[Loop found] Nearest distance: " << min_dist << " btn " << polarcontexts_.size()-1 << " and " << nn_idx << "." << endl;
+        cout << "[Loop found] Nearest distance: " << min_dist << " btn " << frame_count << " and " << framesIndex[nn_idx] << "." << endl;
         cout << "[Loop found] yaw diff: " << nn_align * PC_UNIT_SECTORANGLE << " deg." << endl;
     }
     else
