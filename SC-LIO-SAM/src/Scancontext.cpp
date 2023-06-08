@@ -202,7 +202,7 @@ void SCManager::makeCartScancontext( pcl::PointCloud<SCPointType> & _scan_down){
  * 隧道特征的3个条件：
  *              3. mattix中0元素比例超过 80%
  *              1. mattix是否有两条线位于左右，连续长度超过 THRESHOLE_LINE_LENGTH 个
- *              2. 两条线上的数据均值 > 2.0m
+ *              2. 两条line线上的数据均值 > 2.0m
  * @return true 
  * @return false 
  */
