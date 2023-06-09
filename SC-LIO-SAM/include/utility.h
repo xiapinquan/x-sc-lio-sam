@@ -59,7 +59,7 @@ typedef std::numeric_limits< double > dbl;
 
 typedef pcl::PointXYZI PointType;
 
-enum class SensorType { MULRAN, VELODYNE, OUSTER };
+enum class SensorType { MULRAN, VELODYNE, OUSTER, ROBOSENSE };
 
 class ParamServer
 {
@@ -187,6 +187,8 @@ public:
         else if (sensorStr == "mulran")
         {
             sensor = SensorType::MULRAN;
+        }else if( sensorStr == "robosense"){
+            sensor = SensorType::ROBOSENSE;
         }
         else
         {

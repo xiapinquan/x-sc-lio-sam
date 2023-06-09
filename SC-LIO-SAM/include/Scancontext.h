@@ -119,7 +119,6 @@ public:
     // add for save cart sacn conext of every frame points;
     Eigen::MatrixXd cartScanContext;
     int frame_count = 0;
-    // std::atomic<bool> 
     std::atomic<bool> degeneratation_flag;
     std::vector<int> framesIndex;
     const int TUNNEL_RADIUS = 15;

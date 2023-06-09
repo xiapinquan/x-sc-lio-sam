@@ -14,6 +14,20 @@ POINT_CLOUD_REGISTER_POINT_STRUCT (VelodynePointXYZIRT,
     (uint16_t, ring, ring) (float, time, time)
 )
 
+// rslidar和velodyne的格式有微小的区别
+// rslidar的点云格式
+struct RsPointXYZIRT {
+    PCL_ADD_POINT4D;
+    uint8_t intensity;
+    uint16_t ring = 0;
+    double timestamp = 0;
+
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+POINT_CLOUD_REGISTER_POINT_STRUCT(RsPointXYZIRT,
+                                  (float, x, x)(float, y, y)(float, z, z)(uint8_t, intensity, intensity)
+                                          (uint16_t, ring, ring)(double, timestamp, timestamp))
+
 struct OusterPointXYZIRT {
     PCL_ADD_POINT4D;
     float intensity;
@@ -82,6 +96,7 @@ private:
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn;
     pcl::PointCloud<OusterPointXYZIRT>::Ptr tmpOusterCloudIn;
     pcl::PointCloud<MulranPointXYZIRT>::Ptr tmpMulranCloudIn;
+    pcl::PointCloud<RsPointXYZIRT>::Ptr tmpRoboSenseCloudIn;
     pcl::PointCloud<PointType>::Ptr   fullCloud;
     pcl::PointCloud<PointType>::Ptr   extractedCloud;
 
@@ -121,6 +136,7 @@ public:
         laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
         tmpOusterCloudIn.reset(new pcl::PointCloud<OusterPointXYZIRT>());
         tmpMulranCloudIn.reset(new pcl::PointCloud<MulranPointXYZIRT>());
+        tmpRoboSenseCloudIn.reset(new pcl::PointCloud<RsPointXYZIRT>());
         fullCloud.reset(new pcl::PointCloud<PointType>());
         extractedCloud.reset(new pcl::PointCloud<PointType>());
 
@@ -205,6 +221,19 @@ public:
         resetParameters();
     }
 
+    template<typename T>
+    bool has_nan(T point) {
+
+    // remove nan point, or the feature assocaion will crash, the surf point will containing nan points
+    // pcl remove nan not work normally
+    // ROS_ERROR("Containing nan point!");
+    if (pcl_isnan(point.x) || pcl_isnan(point.y) || pcl_isnan(point.z)) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
     bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
     {
         // cache point cloud
@@ -259,6 +288,28 @@ public:
                 dst.ring = src.ring;
                 dst.time = float(src.t);
             }
+        }
+        else if (sensor == SensorType::ROBOSENSE){
+            // Convert to Velodyne format
+            pcl::moveFromROSMsg(currentCloudMsg, *tmpRoboSenseCloudIn);
+            laserCloudIn->points.resize(tmpRoboSenseCloudIn->size());
+            laserCloudIn->is_dense = true;
+            int valid_nums = 0;
+            for (size_t i = 0; i < tmpRoboSenseCloudIn->size(); i++)
+            {
+                if(!has_nan(tmpRoboSenseCloudIn->points[i])){
+                    auto &src = tmpRoboSenseCloudIn->points[i];
+                    auto &dst = laserCloudIn->points[valid_nums++];
+                    dst.x = src.x;
+                    dst.y = src.y;
+                    dst.z = src.z;
+                    dst.intensity = src.intensity;
+                    dst.ring = src.ring;
+                    // dst.time = float(src.timestamp);
+                    dst.time = float(src.timestamp - tmpRoboSenseCloudIn->points[0].timestamp);
+                }
+            }
+            laserCloudIn->points.resize(valid_nums);
         }
         else
         {

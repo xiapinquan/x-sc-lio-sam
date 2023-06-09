@@ -1,7 +1,7 @@
 lio_sam:
 
   # Topics
-  pointCloudTopic: "/velodyne_points"               # Point cloud data
+  pointCloudTopic: "/top/rslidar_points"               # Point cloud data
   imuTopic: "/rtk_imu"                         # IMU data
   odomTopic: "odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
   gpsTopic: "odometry/gpsz"                   # GPS odometry topic from navsat, see module_navsat.launch file
@@ -24,9 +24,9 @@ lio_sam:
     # warning: if you have already data in the above savePCDDirectory, it will all remove and remake them. Thus, backup is recommended if pre-made data exist. 
 
   # Sensor Settings
-  sensor: velodyne                            # lidar sensor type, either 'velodyne' or 'ouster'
+  sensor: robosense                            # lidar sensor type, either 'velodyne' or 'ouster' or "robosense"
   N_SCAN: 80                                 # number of lidar channel (i.e., 16, 32, 64, 128)
-  Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048)
+  Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne/robosense:1800, Ouster:512,1024,2048)
   downsampleRate: 1                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
   lidarMinRange: 1.5                          # default: 1.0, minimum lidar range to be used
   lidarMaxRange: 1000.0                       # default: 1000.0, maximum lidar range to be used
