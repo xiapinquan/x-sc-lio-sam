@@ -1,8 +1,9 @@
 lio_sam:
 
   # Topics
-  pointCloudTopic: "/top/rslidar_points"               # Point cloud data
-  imuTopic: "/rtk_imu"                         # IMU data
+  pointCloudTopic: "top/rslidar_points"              #   velodyne_points  \  points_raw  \  top/rslidar_points
+  imuTopic: "rtk_imu"                             # IMU data
+
   odomTopic: "odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
   gpsTopic: "odometry/gpsz"                   # GPS odometry topic from navsat, see module_navsat.launch file
 
@@ -19,45 +20,53 @@ lio_sam:
   poseCovThreshold: 25.0                      # m^2, threshold for using GPS data
   
   # Export settings
-  savePCD: true                              # https://github.com/TixiaoShan/LIO-SAM/issues/3
+  savePCD: false                              # https://github.com/TixiaoShan/LIO-SAM/issues/3
   savePCDDirectory: "/home/cxzn/Downloads/LOAM/x-sc-lio-sam/"  # use global path, and end with "/" 
     # warning: if you have already data in the above savePCDDirectory, it will all remove and remake them. Thus, backup is recommended if pre-made data exist. 
 
   # Sensor Settings
-  sensor: robosense                            # lidar sensor type, either 'velodyne' or 'ouster' or "robosense"
-  N_SCAN: 80                                 # number of lidar channel (i.e., 16, 32, 64, 128)
-  Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne/robosense:1800, Ouster:512,1024,2048)
+  # sensor: livox                            # lidar sensor type, 'velodyne' or 'ouster' or 'robosense' or  'livox'
+  # N_SCAN: 6                                  # number of lidar channel (i.e., Velodyne/Ouster: 16, 32, 64, 128, Livox Horizon: 6)
+  # Horizon_SCAN: 4000                          # lidar hori
+  sensor: robosense                            # lidar sensor type, 'velodyne' or 'ouster' or 'robosense' or  'livox'
+  N_SCAN: 80                                  # number of lidar channel (i.e., Velodyne/Ouster: 16, 32, 64, 128, Livox Horizon: 6)
+  Horizon_SCAN: 1800                          # lidar horizontal resolution (Velodyne:1800, Ouster:512,1024,2048, Livox Horizon: 4000)
+
   downsampleRate: 1                           # default: 1. Downsample your data if too many points. i.e., 16 = 64 / 4, 16 = 16 / 1
-  lidarMinRange: 1.5                          # default: 1.0, minimum lidar range to be used
+  lidarMinRange: 1.0                          # default: 1.0, minimum lidar range to be used
   lidarMaxRange: 1000.0                       # default: 1000.0, maximum lidar range to be used
 
   # IMU Settings
-  imuAccNoise: 0.009939570888238808e-03
-  imuGyrNoise: 0.005636343949698187e-03
-  imuAccBiasN: 0.64356659353532566e-03
-  imuGyrBiasN: 0.35640318696367613e-03
+  imuAccNoise: 3.9939570888238808e-03
+  imuGyrNoise: 1.5636343949698187e-03
+  imuAccBiasN: 6.4356659353532566e-05
+  imuGyrBiasN: 3.5640318696367613e-05
   imuGravity: 9.80511
   imuRPYWeight: 0.01
 
   # Extrinsics (lidar -> IMU)
-  extrinsicTrans: [-1.5, 0.0, -1.5]
+  # extrinsicTrans: [-1.5, 0.0, -1.5]
+  extrinsicTrans: [0, 0.0, 0]
+
   extrinsicRot: [1, 0, 0,
                   0, 1, 0,
                   0, 0, 1]
   extrinsicRPY: [1,  0, 0,
                  0, 1, 0,
                   0, 0, 1]
-  # extrinsicRot: [1, 0, 0,
+  # extrinsicRot: [-1, 0, 0,   //livox horizon data
   #                 0, 1, 0,
-  #                 0, 0, 1]
-  # extrinsicRPY: [1, 0, 0,
-  #                 0, 1, 0,
-  #                 0, 0, 1]
+  #                 0, 0, -1]
+  # extrinsicRPY: [0, -1, 0,
+  #                1, 0, 0,
+  #                0, 0, 1]
 
   # LOAM feature threshold
   edgeThreshold: 1.0
   surfThreshold: 0.1
-  edgeFeatureMinValidNum: 10
+
+  # edgeFeatureMinValidNum: 10 #velodye
+  edgeFeatureMinValidNum: 10  #livox
   surfFeatureMinValidNum: 100
 
   # voxel filter paprams
@@ -101,7 +110,7 @@ navsat:
   frequency: 50
   wait_for_datum: false
   delay: 0.0
-  magnetic_declination_radians: 0
+  magnetic_declination_radians: 0     
   yaw_offset: 0
   zero_altitude: true
   broadcast_utm_transform: false

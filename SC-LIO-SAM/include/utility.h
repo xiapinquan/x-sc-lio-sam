@@ -59,7 +59,7 @@ typedef std::numeric_limits< double > dbl;
 
 typedef pcl::PointXYZI PointType;
 
-enum class SensorType { MULRAN, VELODYNE, OUSTER, ROBOSENSE };
+enum class SensorType { MULRAN, VELODYNE, OUSTER, ROBOSENSE, LIVOX };
 
 class ParamServer
 {
@@ -187,13 +187,17 @@ public:
         else if (sensorStr == "mulran")
         {
             sensor = SensorType::MULRAN;
-        }else if( sensorStr == "robosense"){
+        }
+        else if( sensorStr == "robosense"){
             sensor = SensorType::ROBOSENSE;
+        }
+        else if (sensorStr == "livox"){
+            sensor = SensorType::LIVOX;
         }
         else
         {
             ROS_ERROR_STREAM(
-                "Invalid sensor type (must be either 'velodyne' or 'ouster' or 'mulran'): " << sensorStr);
+                "Invalid sensor type (must be either 'velodyne' or 'ouster' or 'mulran' or 'robosense' or 'livox'): " << sensorStr);
             ros::shutdown();
         }
 
@@ -269,18 +273,30 @@ public:
         imu_out.angular_velocity.z = gyr.z();
         // rotate roll pitch yaw
         Eigen::Quaterniond q_from(imu_in.orientation.w, imu_in.orientation.x, imu_in.orientation.y, imu_in.orientation.z);
-        Eigen::Quaterniond q_final = q_from * extQRPY;
+        Eigen::Quaterniond q_final;
+        if (sqrt(q_from.x()*q_from.x() + q_from.y()*q_from.y() + q_from.z()*q_from.z() + q_from.w()*q_from.w()) < 0.1)
+        {
+            q_final = extQRPY;
+        }else{
+            q_final = q_from * extQRPY;
+        }
+        q_final.normalize();
         imu_out.orientation.x = q_final.x();
         imu_out.orientation.y = q_final.y();
         imu_out.orientation.z = q_final.z();
         imu_out.orientation.w = q_final.w();
-
-        if (sqrt(q_final.x()*q_final.x() + q_final.y()*q_final.y() + q_final.z()*q_final.z() + q_final.w()*q_final.w()) < 0.1)
-        {
-            ROS_ERROR("Invalid quaternion, please use a 9-axis IMU!");
-            ros::shutdown();
-        }
-
+        // Eigen::Quaterniond q_from(imu_in.orientation.w, imu_in.orientation.x, imu_in.orientation.y, imu_in.orientation.z);
+        // Eigen::Quaterniond q_final = q_from * extQRPY;
+        // imu_out.orientation.x = q_final.x();
+        // imu_out.orientation.y = q_final.y();
+        // imu_out.orientation.z = q_final.z();
+        // imu_out.orientation.w = q_final.w();
+        // if (sqrt(q_final.x()*q_final.x() + q_final.y()*q_final.y() + q_final.z()*q_final.z() + q_final.w()*q_final.w()) < 0.1)
+        // {
+        //     ROS_ERROR("Invalid quaternion, please use a 9-axis IMU!");
+        //     ros::shutdown();
+        // }
+        
         return imu_out;
     }
 };

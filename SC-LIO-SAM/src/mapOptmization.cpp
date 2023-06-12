@@ -588,7 +588,10 @@ public:
             rate.sleep();
             if(!scManager.degeneratation_flag){
                 performRSLoopClosure();
-                performSCLoopClosure(); // giseop
+                if (sensor != SensorType::LIVOX)
+                {
+                    performSCLoopClosure(); // giseop
+                }
                 visualizeLoopClosure();
             }
         }
@@ -617,9 +620,6 @@ public:
         *copy_cloudKeyPoses2D = *cloudKeyPoses3D; // giseop 
         *copy_cloudKeyPoses6D = *cloudKeyPoses6D;
         mtx.unlock();
-
-        return;
-
 
         // find keys
         int loopKeyCur;
@@ -1580,6 +1580,12 @@ public:
         if (cloudKeyPoses3D->points.empty())
             return true;
 
+        if (sensor == SensorType::LIVOX)
+        {
+            if (timeLaserInfoCur - cloudKeyPoses6D->back().time > 1.0)
+                return true;
+        }
+
         Eigen::Affine3f transStart = pclPointToAffine3f(cloudKeyPoses6D->back());
         Eigen::Affine3f transFinal = pcl::getTransformation(transformTobeMapped[3], transformTobeMapped[4], transformTobeMapped[5], 
                                                             transformTobeMapped[0], transformTobeMapped[1], transformTobeMapped[2]);
@@ -1865,7 +1871,10 @@ public:
         updatePath(thisPose6D);
 
         //计算scan context
-        computeScanContext();
+        if (sensor != SensorType::LIVOX)
+        {
+            computeScanContext();
+        }
     }
 
     void correctPoses()
