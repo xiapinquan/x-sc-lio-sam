@@ -44,18 +44,18 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(OusterPointXYZIRT,
     (uint8_t, ring, ring) (uint16_t, noise, noise) (uint32_t, range, range)
 )
 
-struct MulranPointXYZIRT { // from the file player's topic https://github.com/irapkaist/file_player_mulran, see https://github.com/irapkaist/file_player_mulran/blob/17da0cb6ef66b4971ec943ab8d234aa25da33e7e/src/ROSThread.cpp#L7
-     PCL_ADD_POINT4D;
-     float intensity;
-     uint32_t t;
-     int ring;
+// struct MulranPointXYZIRT { // from the file player's topic https://github.com/irapkaist/file_player_mulran, see https://github.com/irapkaist/file_player_mulran/blob/17da0cb6ef66b4971ec943ab8d234aa25da33e7e/src/ROSThread.cpp#L7
+//      PCL_ADD_POINT4D;
+//      float intensity;
+//      uint32_t t;
+//      int ring;
 
-     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
- }EIGEN_ALIGN16;
- POINT_CLOUD_REGISTER_POINT_STRUCT (MulranPointXYZIRT,
-     (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
-     (uint32_t, t, t) (int, ring, ring)
- )
+//      EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+//  }EIGEN_ALIGN16;
+//  POINT_CLOUD_REGISTER_POINT_STRUCT (MulranPointXYZIRT,
+//      (float, x, x) (float, y, y) (float, z, z) (float, intensity, intensity)
+//      (uint32_t, t, t) (int, ring, ring)
+//  )
 
 // Use the Velodyne point format as a common representation
 using PointXYZIRT = VelodynePointXYZIRT;
@@ -81,8 +81,10 @@ private:
     ros::Subscriber subOdom;
     std::deque<nav_msgs::Odometry> odomQueue;
 
-    std::deque<sensor_msgs::PointCloud2> cloudQueue;
+    std::deque<sensor_msgs::PointCloud2> cloudQueue_PC2;
+    std::deque<livox_ros_driver::CustomMsg> cloudQueue_Livox;
     sensor_msgs::PointCloud2 currentCloudMsg;
+    livox_ros_driver::CustomMsg currentLivoxCloudMsg;
 
     double *imuTime = new double[queueLength];
     double *imuRotX = new double[queueLength];
@@ -95,7 +97,7 @@ private:
 
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn;
     pcl::PointCloud<OusterPointXYZIRT>::Ptr tmpOusterCloudIn;
-    pcl::PointCloud<MulranPointXYZIRT>::Ptr tmpMulranCloudIn;
+    // pcl::PointCloud<MulranPointXYZIRT>::Ptr tmpMulranCloudIn;
     pcl::PointCloud<RsPointXYZIRT>::Ptr tmpRoboSenseCloudIn;
     pcl::PointCloud<PointType>::Ptr   fullCloud;
     pcl::PointCloud<PointType>::Ptr   extractedCloud;
@@ -120,7 +122,12 @@ public:
     {
         subImu        = nh.subscribe<sensor_msgs::Imu>(imuTopic, 2000, &ImageProjection::imuHandler, this, ros::TransportHints().tcpNoDelay());
         subOdom       = nh.subscribe<nav_msgs::Odometry>(odomTopic+"_incremental", 2000, &ImageProjection::odometryHandler, this, ros::TransportHints().tcpNoDelay());
-        subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(pointCloudTopic, 5, &ImageProjection::cloudHandler, this, ros::TransportHints().tcpNoDelay());
+        
+        if(sensor != SensorType::LIVOX){
+            subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(pointCloudTopic, 5, &ImageProjection::PointCloud2MsgCB, this, ros::TransportHints().tcpNoDelay());
+        }else{
+            subLaserCloud = nh.subscribe<livox_ros_driver::CustomMsg>(pointCloudTopic, 5, &ImageProjection::livoxCustomMsgCB, this, ros::TransportHints().tcpNoDelay());
+        }
 
         pubExtractedCloud = nh.advertise<sensor_msgs::PointCloud2> ("lio_sam/deskew/cloud_deskewed", 1);
         pubLaserCloudInfo = nh.advertise<lio_sam::cloud_info> ("lio_sam/deskew/cloud_info", 1);
@@ -135,7 +142,7 @@ public:
     {
         laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
         tmpOusterCloudIn.reset(new pcl::PointCloud<OusterPointXYZIRT>());
-        tmpMulranCloudIn.reset(new pcl::PointCloud<MulranPointXYZIRT>());
+        // tmpMulranCloudIn.reset(new pcl::PointCloud<MulranPointXYZIRT>());
         tmpRoboSenseCloudIn.reset(new pcl::PointCloud<RsPointXYZIRT>());
         fullCloud.reset(new pcl::PointCloud<PointType>());
         extractedCloud.reset(new pcl::PointCloud<PointType>());
@@ -205,7 +212,16 @@ public:
         odomQueue.push_back(*odometryMsg);
     }
 
-    void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
+    void livoxCustomMsgCB(const livox_ros_driver::CustomMsgConstPtr& laserCloudMsg){
+        cloudHandler(laserCloudMsg);
+    }
+
+    void PointCloud2MsgCB(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
+        cloudHandler(laserCloudMsg);
+    }
+
+    template<class LidarMsgType>
+    void cloudHandler(const LidarMsgType& laserCloudMsg)
     {
         if (!cachePointCloud(laserCloudMsg))
             return;
@@ -233,24 +249,80 @@ public:
     } else {
         return false;
     }
-}
+    }
 
-    bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
+    void moveFromCustomMsg(livox_ros_driver::CustomMsg &Msg, pcl::PointCloud<PointXYZIRT> & cloud)
+    {
+        cloud.clear();
+        cloud.reserve(Msg.point_num);
+        PointXYZIRT point;
+
+        cloud.header.frame_id=Msg.header.frame_id;
+        cloud.header.stamp=Msg.header.stamp.toNSec()/1000;
+        cloud.header.seq=Msg.header.seq;
+
+        for(uint i=0;i<Msg.point_num-1;i++)
+        {
+            point.x=Msg.points[i].x; 
+            point.y=Msg.points[i].y; 
+            point.z=Msg.points[i].z; 
+            point.intensity=(float)Msg.points[i].reflectivity / 255.0; 
+            // point.tag=Msg.points[i].tag; 
+            point.time=Msg.points[i].offset_time*1e-9; 
+            point.ring=Msg.points[i].line; 
+            cloud.push_back(point);
+        }
+    }
+
+    //for livox
+    bool cachePointCloud(const livox_ros_driver::CustomMsgConstPtr& laserCloudMsg)
     {
         // cache point cloud
-        cloudQueue.push_back(*laserCloudMsg);
-        if (cloudQueue.size() <= 2)
+        cloudQueue_Livox.push_back(*laserCloudMsg);
+        if (cloudQueue_Livox.size() <= 2)
             return false;
-
         // convert cloud
-        currentCloudMsg = std::move(cloudQueue.front());
+        currentLivoxCloudMsg = std::move(cloudQueue_Livox.front());
+        cloudQueue_Livox.pop_front();
 
+        if (sensor == SensorType::LIVOX)
+        {
+            moveFromCustomMsg(currentLivoxCloudMsg, *laserCloudIn);
+        }
+        else
+        {
+            ROS_ERROR_STREAM("Unknown sensor type: " << int(sensor));
+            ros::shutdown();
+        }
+
+        // get timestamp
+        cloudHeader = currentLivoxCloudMsg.header;
+        timeScanCur = cloudHeader.stamp.toSec();
+        timeScanEnd = timeScanCur + laserCloudIn->points.back().time;
+
+        // check dense flag
+        if (laserCloudIn->is_dense == false)
+        {
+            ROS_ERROR("Point cloud is not in dense format, please remove NaN points first!");
+            ros::shutdown();
+        }
+
+        return true;
+    }
+
+    bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
+    {   
+        // cache point cloud
+        cloudQueue_PC2.push_back(*laserCloudMsg);
+        if (cloudQueue_PC2.size() <= 2) return false;
+        // convert cloud
+        currentCloudMsg = std::move(cloudQueue_PC2.front());
+        cloudQueue_PC2.pop_front();
+        
         cloudHeader = currentCloudMsg.header;
         timeScanCur = cloudHeader.stamp.toSec();
 
-        cloudQueue.pop_front();
-
-        if (sensor == SensorType::VELODYNE || sensor == SensorType::LIVOX)
+        if (sensor == SensorType::VELODYNE)
         {
             pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
         }
@@ -270,24 +342,6 @@ public:
                 dst.intensity = src.intensity;
                 dst.ring = src.ring;
                 dst.time = src.t * 1e-9f;
-            }
-        }
-        else if (sensor == SensorType::MULRAN)
-        {
-            // Convert to Velodyne format
-            pcl::moveFromROSMsg(currentCloudMsg, *tmpMulranCloudIn);
-            laserCloudIn->points.resize(tmpMulranCloudIn->size());
-            laserCloudIn->is_dense = tmpMulranCloudIn->is_dense;
-            for (size_t i = 0; i < tmpMulranCloudIn->size(); i++)
-            {
-                auto &src = tmpMulranCloudIn->points[i];
-                auto &dst = laserCloudIn->points[i];
-                dst.x = src.x;
-                dst.y = src.y;
-                dst.z = src.z;
-                dst.intensity = src.intensity;
-                dst.ring = src.ring;
-                dst.time = float(src.t);
             }
         }
         else if (sensor == SensorType::ROBOSENSE){

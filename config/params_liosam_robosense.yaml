@@ -1,8 +1,8 @@
 lio_sam:
 
   # Topics
-  pointCloudTopic: "/rslidar_points"              #   velodyne_points  \  points_raw  \  top/rslidar_points
-  imuTopic: "/livox/imu"                             # IMU data
+  pointCloudTopic: "/top/rslidar_points"              #   velodyne_points  \  points_raw  \  top/rslidar_points
+  imuTopic: "/rtk_imu"                             # IMU data
 
   odomTopic: "odometry/imu"                   # IMU pre-preintegration odometry, same frequency as IMU
   gpsTopic: "odometry/gpsz"                   # GPS odometry topic from navsat, see module_navsat.launch file

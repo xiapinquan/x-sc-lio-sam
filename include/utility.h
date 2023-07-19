@@ -52,6 +52,8 @@
 #include <thread>
 #include <mutex>
 #include <sstream>
+#include "livox_ros_driver/CustomMsg.h"
+
 
 using namespace std;
 
