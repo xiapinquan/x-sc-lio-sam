@@ -167,7 +167,7 @@ Visualization Manager:
       Name: Odometry
     - Class: rviz/Group
       Displays:
-        - Alpha: 0.05000000074505806
+        - Alpha: 0.029999999329447746
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
             Max Value: 10
@@ -178,14 +178,14 @@ Visualization Manager:
           Class: rviz/PointCloud2
           Color: 255; 255; 255
           Color Transformer: Intensity
-          Decay Time: 2000
+          Decay Time: 1000
           Enabled: true
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Min Color: 0; 0; 0
           Name: Velodyne
           Position Transformer: XYZ
-          Queue Size: 1000
+          Queue Size: 10
           Selectable: false
           Size (Pixels): 2
           Size (m): 0.009999999776482582

@@ -379,7 +379,7 @@ public:
         if (laserCloudIn->is_dense == false)
         {
             ROS_ERROR("Point cloud is not in dense format, please remove NaN points first!");
-            ros::shutdown();
+            // ros::shutdown();
         }
 
         // check ring channel
@@ -397,8 +397,8 @@ public:
             }
             if (ringFlag == -1)
             {
-                ROS_ERROR("Point cloud ring channel not available, please configure your point cloud data!");
-                ros::shutdown();
+                //ROS_ERROR("Point cloud ring channel not available, please configure your point cloud data!");
+                //ros::shutdown();
             }
         }
 

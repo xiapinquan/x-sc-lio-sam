@@ -1757,7 +1757,7 @@ public:
                     saveSCD(saveSCDDirectory + curr_scd_node_idx + ".scd", curr_scd);
                 }
             }else{
-                cout<<"curr_scd_node_idx:"<<curr_scd_node_idx<<" is tunnel!!!"<<endl;
+                // cout<<"curr_scd_node_idx:"<<curr_scd_node_idx<<" is tunnel!!!"<<endl;
                 normal_frame_count = 0;
             }
             scManager.frame_count++;// = cloudKeyPoses3D->size()-1;
